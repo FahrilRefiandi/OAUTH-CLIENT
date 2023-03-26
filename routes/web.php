@@ -54,11 +54,6 @@ Route::get('/redirect', function (Request $request) {
 Route::get('/callback', function (Request $request) {
     $state = $request->session()->pull('state');
 
-    throw_unless(
-        strlen($state) > 0 && $state === $request->state,
-        InvalidArgumentException::class,
-        'Invalid state value.'
-    );
 
     $response = Http::asForm()->post(env('OAUTH_HOST_SERVER').'/oauth/token', [
         'grant_type' => 'authorization_code',
@@ -68,16 +63,22 @@ Route::get('/callback', function (Request $request) {
         'code' => $request->code,
     ]);
 
+    // return $response->json();
+
+    if($response->failed()){
+        return redirect('/login')->with('status', 'Login failed , permission denied');
+    }
+
+
+    throw_unless(
+        strlen($state) > 0 && $state === $request->state,
+        InvalidArgumentException::class,
+        'Invalid state value.'
+    );
+
+
     $response = $response->json();
-    // dd($response['access_token']);
-
-    // get data from api header Authorization: Bearer $token,Accept: application/json
     $user = Http::withToken($response['access_token'])->get(env('OAUTH_HOST_SERVER').'/api/user')->json();
-
-
-    // return [$user,$user['name'],$response['access_token']];
-
-    // $request->user()->token()->delete();
 
 
     $user = App\Models\User::updateOrCreate([
@@ -92,8 +93,8 @@ Route::get('/callback', function (Request $request) {
         'user_id' => $user->id,
     ],[
         'access_token' => $response['access_token'],
-        // 'refresh_token' => $response['refresh_token'],
-        // 'expires_in' => $response['expires_in'],
+        'refresh_token' => $response['refresh_token'],
+        'expires_in' => $response['expires_in'],
     ]);
 
     Auth::login($user);

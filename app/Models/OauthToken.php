@@ -8,5 +8,5 @@ use Illuminate\Database\Eloquent\Model;
 class OauthToken extends Model
 {
     use HasFactory;
-    protected $fillable=['access_token'];
+    protected $fillable=['access_token','refresh_token','expires_in'];
 }
