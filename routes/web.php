@@ -35,6 +35,8 @@ Route::middleware('auth')->group(function () {
 
 
 
+
+
 Route::get('/redirect', function (Request $request) {
     $request->session()->put('state', $state = Str::random(40));
 
@@ -44,31 +46,14 @@ Route::get('/redirect', function (Request $request) {
         'response_type' => 'code',
         'scope' => '',
         'state' => $state,
-        // 'prompt' => 'consent', // "none", "consent", or "login"
+        // 'prompt' => 'none', // "none", "consent", or "login"
     ]);
 
-    return redirect(env('OAUTH_HOST_SERVER').'/oauth/authorize?'.$query);
+    return redirect(env('OAUTH_HOST_SERVER') . '/oauth/authorize?' . $query);
 });
-
 
 Route::get('/callback', function (Request $request) {
     $state = $request->session()->pull('state');
-
-
-    $response = Http::asForm()->post(env('OAUTH_HOST_SERVER').'/oauth/token', [
-        'grant_type' => 'authorization_code',
-        'client_id' => env('OAUTH_CLIENT_ID'),
-        'client_secret' => env('OAUTH_CLIENT_SECRET'),
-        'redirect_uri' => env('OAUTH_REDIRECT_URI'),
-        'code' => $request->code,
-    ]);
-
-    // return $response->json();
-
-    if($response->failed()){
-        return redirect('/login')->with('status', 'Login failed , permission denied');
-    }
-
 
     throw_unless(
         strlen($state) > 0 && $state === $request->state,
@@ -76,34 +61,45 @@ Route::get('/callback', function (Request $request) {
         'Invalid state value.'
     );
 
+    $response = Http::asForm()->post(env('OAUTH_HOST_SERVER') . '/oauth/token', [
+        'grant_type' => 'authorization_code',
+        'client_id' => env('OAUTH_CLIENT_ID'),
+        'client_secret' => env('OAUTH_CLIENT_SECRET'),
+        'redirect_uri' => env('OAUTH_REDIRECT_URI'),
+        'code' => $request->code,
+    ]);
 
     $response = $response->json();
-    $user = Http::withToken($response['access_token'])->get(env('OAUTH_HOST_SERVER').'/api/user')->json();
+    // dd($response);
+
+    $user = Http::withToken($response['access_token'])->get(env('OAUTH_HOST_SERVER') . '/api/user')->json();
+    // dd($user, $response['access_token']);
+
 
 
     $user = App\Models\User::updateOrCreate([
-        'email' => $user['email'],
-    ],[
+        'oauth_id' => $user['id'],
+    ], [
         'name' => $user['name'],
         'email' => $user['email'],
         'avatar' => $user['avatar'],
     ]);
 
-    $user->token()->updateOrCreate([
-        'user_id' => $user->id,
-    ],[
-        'access_token' => $response['access_token'],
-        'refresh_token' => $response['refresh_token'],
-        'expires_in' => $response['expires_in'],
-    ]);
+    $user->token()->updateOrCreate(
+        [
+            'user_id' => $user->id,
+        ],
+        [
+            'access_token' => $response['access_token'],
+            'refresh_token' => $response['refresh_token'],
+            'expires_in' => $response['expires_in'],
+        ]
+    );
 
     Auth::login($user);
 
     return redirect('/dashboard');
-
-
-
-
 });
+
 
 require __DIR__ . '/auth.php';
